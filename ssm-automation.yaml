@@ -1,0 +1,39 @@
+description: Invoke Lambda Function with Multiple Inputs
+schemaVersion: '0.3'
+parameters:
+  LambdaFunctionName:
+    type: String
+    description: The Name Of The Lambda Function To Invoke
+  DatabaseUserName:
+    type: String
+    description: Database User Name
+  DBName:
+    type: String
+    description: Name Of The Database
+  MasterUserSecretName:
+    type: String
+    description: Name Of The Master User Secret In the DB Account
+  GrantType:
+    type: String
+    description: Grant Type
+    default: ''
+    allowedValues:
+      - admin
+      - readwrite
+      - readonly
+      - ''
+  Action:
+    type: String
+    description: Action To Be Performed
+    allowedValues:
+      - create_user
+      - delete_user
+      - update_grant
+      - reset_password
+mainSteps:
+  - name: invokeLambda
+    action: aws:invokeLambdaFunction
+    isEnd: true
+    inputs:
+      FunctionName: '{{ LambdaFunctionName }}'
+      Payload: '{"username":"{{ DatabaseUserName }}", "role":"{{ GrantType }}", "rds_secret_name":"{{ MasterUserSecretName }}", "db_name":"{{ DBName }}", "action":"{{ Action }}"}'
