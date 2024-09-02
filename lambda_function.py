@@ -178,18 +178,27 @@ def lambda_handler(event, context):
             # Check if user exists before attempting to delete
             if not user_exists(cursor, username):
                 return {'statusCode': 400, 'body': json.dumps(f'User {username} does not exist.')}
-            else:
-                delete_user(cursor, username)
-
-
-            # Delete corresponding secret
+        
+            # Get the secret metadata from Secrets Manager
             secret_name = f"rds-{db_name}-{username}-secret"
             try:
+                secret_metadata = secrets_manager.describe_secret(SecretId=secret_name)
+            except secrets_manager.exceptions.ResourceNotFoundException:
+                # Secret does not exist, do not proceed with deleting the user
+                logger.info(f"No secret found for user {username}, skipping delete operation.")
+                return {'statusCode': 200, 'body': json.dumps(f'User {username} not deleted as no associated secret was found.')}
+        
+            # Check if the user was created by this automation
+            created_by_automation = any(tag['Key'] == 'create_by_user_automation' and tag['Value'] == 'true' for tag in secret_metadata.get('Tags', []))
+        
+            if created_by_automation:
+                # Proceed with deleting the user and the corresponding secret
+                delete_user(cursor, username)
                 secrets_manager.delete_secret(SecretId=secret_name, ForceDeleteWithoutRecovery=True)
-                logger.info(f"Deleted the secret for the user {username}")
-            except ClientError as e:
-                logger.info(f"Unable to delete the secret for user {username}: {e}")
-                return {'statusCode': 500, 'body': json.dumps('User deleted in database but failed to delete secret in Secrets Manager')}
+                logger.info(f"Deleted the secret and user {username}")
+                return {'statusCode': 200, 'body': json.dumps(f'User {username} and associated secret deleted successfully.')}
+            else:
+                return {'statusCode': 400, 'body': json.dumps(f'User {username} was not created by this automation and cannot be deleted.')}
         
         elif action == 'update_secret':
             secret_id = event.get('secret_name')
